@@ -2,11 +2,10 @@ import argparse
 import json
 import os
 
+import httpx
 from mcp.server.fastmcp import FastMCP
 
 from app.dataset import get_dataset_summary
-from app.predictor import get_model_status, predict_payment_delay
-from app.schemas import PaymentDelayRequest
 
 
 mcp = FastMCP(
@@ -15,6 +14,8 @@ mcp = FastMCP(
     port=int(os.getenv("MCP_PORT", "8001")),
     streamable_http_path=os.getenv("MCP_PATH", "/mcp"),
 )
+
+API_BASE_URL = os.getenv("TELECOM_API_BASE_URL", "http://telecom-api:8000")
 
 
 @mcp.tool()
@@ -48,34 +49,41 @@ def predict_payment_delay_tool(
     the model version. If no trained pipeline exists yet, this returns a random
     mock prediction so the MCP integration can be tested before Partea 1 lands.
     """
-    request = PaymentDelayRequest(
-        state=state,
-        account_length=account_length,
-        area_code=area_code,
-        international_plan=international_plan,
-        voice_mail_plan=voice_mail_plan,
-        number_vmail_messages=number_vmail_messages,
-        total_day_minutes=total_day_minutes,
-        total_day_calls=total_day_calls,
-        total_day_charge=total_day_charge,
-        total_eve_minutes=total_eve_minutes,
-        total_eve_calls=total_eve_calls,
-        total_eve_charge=total_eve_charge,
-        total_night_minutes=total_night_minutes,
-        total_night_calls=total_night_calls,
-        total_night_charge=total_night_charge,
-        total_intl_minutes=total_intl_minutes,
-        total_intl_calls=total_intl_calls,
-        total_intl_charge=total_intl_charge,
-        number_customer_service_calls=number_customer_service_calls,
-    )
-    return predict_payment_delay(request)
+    payload = {
+        "state": state,
+        "account_length": account_length,
+        "area_code": area_code,
+        "international_plan": international_plan,
+        "voice_mail_plan": voice_mail_plan,
+        "number_vmail_messages": number_vmail_messages,
+        "total_day_minutes": total_day_minutes,
+        "total_day_calls": total_day_calls,
+        "total_day_charge": total_day_charge,
+        "total_eve_minutes": total_eve_minutes,
+        "total_eve_calls": total_eve_calls,
+        "total_eve_charge": total_eve_charge,
+        "total_night_minutes": total_night_minutes,
+        "total_night_calls": total_night_calls,
+        "total_night_charge": total_night_charge,
+        "total_intl_minutes": total_intl_minutes,
+        "total_intl_calls": total_intl_calls,
+        "total_intl_charge": total_intl_charge,
+        "number_customer_service_calls": number_customer_service_calls,
+    }
+
+    with httpx.Client(timeout=20.0) as client:
+        response = client.post(f"{API_BASE_URL}/predict", json=payload)
+        response.raise_for_status()
+        return response.json()
 
 
 @mcp.resource("telecom://model-status")
 def model_status_resource() -> str:
     """Return whether the trained ML pipeline is available."""
-    return json.dumps(get_model_status(), indent=2)
+    with httpx.Client(timeout=20.0) as client:
+        response = client.get(f"{API_BASE_URL}/health")
+        response.raise_for_status()
+        return json.dumps(response.json(), indent=2)
 
 
 @mcp.resource("telecom://dataset-summary")

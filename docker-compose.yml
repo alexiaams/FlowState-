@@ -4,8 +4,6 @@ services:
     command: uvicorn app.api:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
-    volumes:
-      - ./models:/app/models
 
   telecom-mcp:
     build: .
@@ -16,8 +14,6 @@ services:
       MCP_PATH: /mcp
     ports:
       - "8001:8001"
-    volumes:
-      - ./models:/app/models
 
   mcpo:
     image: ghcr.io/open-webui/mcpo:main
@@ -32,8 +28,6 @@ services:
       - http://telecom-mcp:8001/mcp
     ports:
       - "8002:8002"
-    volumes:
-      - ./models:/app/models
 
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
@@ -43,7 +37,6 @@ services:
     ports:
       - "4000:4000"
     volumes:
-
       - ./config:/app/config
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
