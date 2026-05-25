@@ -1,0 +1,48 @@
+services:
+  telecom-api:
+    build: .
+    command: uvicorn app.api:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models
+
+  telecom-mcp:
+    build: .
+    command: python -m app.mcp_server --transport streamable-http
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8001
+      MCP_PATH: /mcp
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./models:/app/models
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    env_file:
+      - .env
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml:ro
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    depends_on:
+      - litellm
+      - telecom-mcp
+    ports:
+      - "3000:8080"
+    environment:
+      WEBUI_AUTH: "false"
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY}
+      OPENAI_API_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
+    volumes:
+      - open-webui-data:/app/backend/data
+
+volumes:
+  open-webui-data:
