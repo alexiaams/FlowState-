@@ -9,13 +9,15 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, classification_report, roc_auc_score
 
-df = pd.read_csv('telecomunicatii.csv')
-target_col = 'payment_delay'
+# Configurare 
+DATA_PATH    = 'telecomunicatii.csv'
+TARGET_COL   = 'payment_delay'
+THRESHOLD    = 0.35
+TEST_SIZE    = 0.20
+VAL_SIZE     = 0.25
+RANDOM_STATE = 42
 
-y = df[target_col].map({'yes': 1, 'no': 0})
-X = df.drop(columns=[target_col])
-
-numeric_features = [
+NUMERIC_FEATURES = [
     'account_length', 'number_vmail_messages',
     'total_day_minutes', 'total_day_calls', 'total_day_charge',
     'total_eve_minutes', 'total_eve_calls', 'total_eve_charge',
@@ -23,90 +25,67 @@ numeric_features = [
     'total_intl_minutes', 'total_intl_calls', 'total_intl_charge',
     'number_customer_service_calls'
 ]
-categorical_features = ['state', 'area_code', 'international_plan', 'voice_mail_plan']
+
+CATEGORICAL_FEATURES = ['state', 'area_code', 'international_plan', 'voice_mail_plan']
+
+# ── Date ──────────────────────────────────────────────────────────────────────
+df = pd.read_csv(DATA_PATH)
+y  = df[TARGET_COL].map({'yes': 1, 'no': 0})
+X  = df.drop(columns=[TARGET_COL])
 
 # ── Split: 60% train | 20% validation | 20% test ─────────────────────────────
 X_temp, X_test, y_temp, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42, stratify=y
+    X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
 )
 X_train, X_val, y_train, y_val = train_test_split(
-    X_temp, y_temp, test_size=0.25, random_state=42, stratify=y_temp
+    X_temp, y_temp, test_size=VAL_SIZE, random_state=RANDOM_STATE, stratify=y_temp
 )
 
 print(f"Train:      {len(X_train)} obs ({len(X_train)/len(X)*100:.0f}%)")
 print(f"Validation: {len(X_val)} obs ({len(X_val)/len(X)*100:.0f}%)")
 print(f"Test:       {len(X_test)} obs ({len(X_test)/len(X)*100:.0f}%)")
-print(f"\nRată delay — train: {y_train.mean():.3f} | val: {y_val.mean():.3f} | test: {y_test.mean():.3f}")
+print(f"Rată delay  train: {y_train.mean():.3f} | val: {y_val.mean():.3f} | test: {y_test.mean():.3f}")
 
-# ── Preprocessor + model ──────────────────────────────────────────────────────
+# ── Model ─────────────────────────────────────────────────────────────────────
+model = RandomForestClassifier(
+    n_estimators=100,
+    class_weight='balanced',
+    random_state=RANDOM_STATE
+)
+
+# ── Pipeline ──────────────────────────────────────────────────────────────────
 preprocessor = ColumnTransformer(transformers=[
-    ('num', StandardScaler(), numeric_features),
-    ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
+    ('num', StandardScaler(), NUMERIC_FEATURES),
+    ('cat', OneHotEncoder(handle_unknown='ignore'), CATEGORICAL_FEATURES)
 ])
 
 model_pipeline = Pipeline([
     ('preprocessor', preprocessor),
-    ('classifier', RandomForestClassifier(
-        n_estimators=100,
-        class_weight='balanced',
-        random_state=42
-    ))
+    ('classifier', model)
 ])
 
 # ── Antrenare ─────────────────────────────────────────────────────────────────
 print("\nAntrenăm modelul Random Forest...")
 model_pipeline.fit(X_train, y_train)
 
-# ── Probabilități pe validation ───────────────────────────────────────────────
-y_val_proba = model_pipeline.predict_proba(X_val)[:, 1]
+# ── Evaluare ──────────────────────────────────────────────────────────────────
+def evaluate(y_true, y_proba, threshold, label):
+    y_pred = (y_proba >= threshold).astype(int)
+    print(f"\n{'=' * 55}")
+    print(f"EVALUARE {label} — prag {threshold}")
+    print(f"{'=' * 55}")
+    print(f"Acuratețe: {accuracy_score(y_true, y_pred):.3f}")
+    print(f"ROC-AUC:   {roc_auc_score(y_true, y_proba):.3f}")
+    print(classification_report(y_true, y_pred,
+          target_names=['Fără întârziere (0)', 'Cu întârziere (1)']))
 
-# ── Alegem pragul optim pe VALIDATION ────────────────────────────────────────
-print("\n" + "=" * 55)
-print("OPTIMIZARE PRAG PE VALIDATION SET")
-print("=" * 55)
-print(f"{'Prag':<8} {'Precision':>10} {'Recall':>8} {'F1':>8} {'ROC-AUC':>10}")
-print("-" * 55)
-
-thresholds = [0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50] # best 0.35
-results = []
-
-for t in thresholds:
-    y_pred_t = (y_val_proba >= t).astype(int)
-    report = classification_report(y_val, y_pred_t, output_dict=True, zero_division=0)
-    prec = report['1']['precision']
-    rec  = report['1']['recall']
-    f1   = report['1']['f1-score']
-    auc  = roc_auc_score(y_val, y_val_proba)
-    results.append({'threshold': t, 'precision': prec, 'recall': rec, 'f1': f1, 'auc': auc})
-    print(f"{t:<8.2f} {prec:>10.3f} {rec:>8.3f} {f1:>8.3f} {auc:>10.3f}")
-
-# Pragul optim = cel mai bun F1 pe clasa minoritară
-best = max(results, key=lambda x: x['f1'])
-best_threshold = best['threshold']
-print(f"\nPrag optim ales (max F1 clasa 'yes'): {best_threshold}")
-
-# ── Evaluare pe VALIDATION cu pragul optim ───────────────────────────────────
-print("\n" + "=" * 55)
-print(f"EVALUARE VALIDATION — prag {best_threshold}")
-print("=" * 55)
-y_val_pred_opt = (y_val_proba >= best_threshold).astype(int)
-print(f"Acuratețe: {accuracy_score(y_val, y_val_pred_opt):.3f}")
-print(f"ROC-AUC:   {roc_auc_score(y_val, y_val_proba):.3f}")
-print(classification_report(y_val, y_val_pred_opt,
-      target_names=['Fără întârziere (0)', 'Cu întârziere (1)']))
-
-# ── Evaluare finală pe TEST cu pragul ales pe validation ─────────────────────
-print("=" * 55)
-print(f"EVALUARE TEST — prag {best_threshold} (rezultat final)")
-print("=" * 55)
+y_val_proba  = model_pipeline.predict_proba(X_val)[:, 1]
 y_test_proba = model_pipeline.predict_proba(X_test)[:, 1]
-y_test_pred_opt = (y_test_proba >= best_threshold).astype(int)
-print(f"Acuratețe: {accuracy_score(y_test, y_test_pred_opt):.3f}")
-print(f"ROC-AUC:   {roc_auc_score(y_test, y_test_proba):.3f}")
-print(classification_report(y_test, y_test_pred_opt,
-      target_names=['Fără întârziere (0)', 'Cu întârziere (1)']))
 
-# ── Salvare model + prag ──────────────────────────────────────────────────────
+evaluate(y_val,  y_val_proba,  THRESHOLD, "VALIDATION")
+evaluate(y_test, y_test_proba, THRESHOLD, "TEST")
+
+# ── Salvare ───────────────────────────────────────────────────────────────────
 save_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'telecom_rf_model.pkl')
-joblib.dump({'pipeline': model_pipeline, 'threshold': best_threshold}, save_path)
-print(f"Model + prag salvate: {save_path}")
+joblib.dump({'pipeline': model_pipeline, 'threshold': THRESHOLD}, save_path)
+print(f"\nModel salvat: {save_path}")
