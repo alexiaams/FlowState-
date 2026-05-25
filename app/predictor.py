@@ -8,8 +8,8 @@ from app.schemas import PaymentDelayRequest
 
 
 MODEL_CANDIDATES = [
-    Path("models/payment_delay_pipeline.joblib"),
     Path("models/telecom_rf_model.pkl"),
+    Path("models/payment_delay_pipeline.joblib"),
     Path("telecom_rf_model.pkl"),
 ]
 MODEL_PATH = MODEL_CANDIDATES[0]
@@ -39,6 +39,7 @@ FEATURE_ORDER = [
 
 _pipeline = None
 _loaded_model_path = None
+_model_metadata = {}
 
 
 def _find_model_path() -> Path | None:
@@ -61,10 +62,21 @@ def _risk_level(probability_yes: float | None) -> str:
 def _load_pipeline():
     global _pipeline
     global _loaded_model_path
+    global _model_metadata
 
     model_path = _find_model_path()
     if _pipeline is None and model_path is not None:
-        _pipeline = joblib.load(model_path)
+        loaded_model = joblib.load(model_path)
+        if isinstance(loaded_model, dict) and "pipeline" in loaded_model:
+            _pipeline = loaded_model["pipeline"]
+            _model_metadata = {
+                key: value
+                for key, value in loaded_model.items()
+                if key != "pipeline"
+            }
+        else:
+            _pipeline = loaded_model
+            _model_metadata = {}
         _loaded_model_path = model_path
 
     return _pipeline
@@ -73,10 +85,12 @@ def _load_pipeline():
 def get_model_status() -> dict:
     model_path = _find_model_path()
     if model_path is not None:
+        _load_pipeline()
         return {
             "status": "available",
             "path": str(model_path),
             "version": model_path.name,
+            "metadata": _model_metadata,
         }
 
     return {
@@ -111,15 +125,13 @@ def predict_payment_delay(features: PaymentDelayRequest) -> dict:
         else features.dict()
     )
     row = pd.DataFrame([feature_data], columns=FEATURE_ORDER)
-    raw_prediction = pipeline.predict(row)[0]
-    prediction = "yes" if raw_prediction in (1, "1", "yes", True) else "no"
-
     probability_yes = None
     if hasattr(pipeline, "predict_proba"):
         probabilities = pipeline.predict_proba(row)[0]
         classes = list(getattr(pipeline, "classes_", []))
         if not classes and hasattr(pipeline, "named_steps"):
-            classes = list(getattr(pipeline.named_steps.get("model"), "classes_", []))
+            final_step = list(pipeline.named_steps.values())[-1]
+            classes = list(getattr(final_step, "classes_", []))
         positive_class = None
         if "yes" in classes:
             positive_class = "yes"
@@ -131,6 +143,13 @@ def predict_payment_delay(features: PaymentDelayRequest) -> dict:
         if positive_class is not None:
             probability_yes = float(probabilities[classes.index(positive_class)])
 
+    threshold = float(_model_metadata.get("threshold", 0.5))
+    if probability_yes is not None:
+        prediction = "yes" if probability_yes >= threshold else "no"
+    else:
+        raw_prediction = pipeline.predict(row)[0]
+        prediction = "yes" if raw_prediction in (1, "1", "yes", True) else "no"
+
     risk_level = _risk_level(probability_yes)
     return {
         "prediction": prediction,
@@ -138,7 +157,8 @@ def predict_payment_delay(features: PaymentDelayRequest) -> dict:
         "risk_level": risk_level,
         "explanation": (
             f"The model predicts payment_delay={prediction}. "
-            f"The estimated delay risk level is {risk_level}."
+            f"The estimated delay risk level is {risk_level}. "
+            f"The decision threshold is {threshold}."
         ),
         "model_version": _loaded_model_path.name if _loaded_model_path else "unknown",
     }

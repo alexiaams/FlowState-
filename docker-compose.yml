@@ -19,21 +19,37 @@ services:
     volumes:
       - ./models:/app/models
 
+  mcpo:
+    image: ghcr.io/open-webui/mcpo:main
+    depends_on:
+      - telecom-mcp
+    command:
+      - --port
+      - "8002"
+      - --server-type
+      - streamable-http
+      - --
+      - http://telecom-mcp:8001/mcp
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./models:/app/models
+
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
-    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    command: ["--config", "/app/config/config.yaml", "--port", "4000"]
     env_file:
       - .env
     ports:
       - "4000:4000"
     volumes:
-      - ./litellm_config.yaml:/app/config.yaml:ro
 
+      - ./config:/app/config
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
     depends_on:
       - litellm
-      - telecom-mcp
+      - mcpo
     ports:
       - "3000:8080"
     environment:

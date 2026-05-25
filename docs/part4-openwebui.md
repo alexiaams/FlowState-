@@ -5,6 +5,7 @@
 - `open-webui`: interfata de chat.
 - `litellm`: proxy OpenAI-compatible catre Amazon Bedrock.
 - `telecom-mcp`: serverul MCP cu tool-ul `predict_payment_delay_tool`.
+- `mcpo`: bridge care transforma MCP in OpenAPI pentru ecranul Tool Servers.
 - `telecom-api`: API-ul FastAPI clasic pentru Partea 2.
 
 ## Unde pui modelul ML
@@ -85,10 +86,16 @@ curl http://localhost:4000/v1/chat/completions \
   -d '{"model":"bedrock-chat","messages":[{"role":"user","content":"Raspunde doar cu OK."}]}'
 ```
 
-Serverul MCP este disponibil in Docker la:
+Serverul MCP brut este disponibil in Docker la:
 
 ```text
 http://telecom-mcp:8001/mcp
+```
+
+Bridge-ul OpenAPI pentru OpenWebUI este disponibil in Docker la:
+
+```text
+http://mcpo:8002
 ```
 
 Din browserul tau, pentru test local, acelasi server este:
@@ -97,10 +104,24 @@ Din browserul tau, pentru test local, acelasi server este:
 http://localhost:8001/mcp
 ```
 
+Iar bridge-ul OpenAPI local este:
+
+```text
+http://localhost:8002/docs
+```
+
 ## Cum conectezi tool-ul MCP in OpenWebUI
 
-In OpenWebUI mergi la zona de admin/settings pentru external tools si adaugi
-un tool MCP Streamable HTTP cu URL-ul:
+In ecranul "Manage Tool Servers" care cere servere OpenAPI, adauga tool server
+cu URL-ul:
+
+```text
+http://mcpo:8002
+```
+
+Nu pune header/API key pentru varianta locala.
+
+Daca ai un ecran care cere explicit MCP Streamable HTTP, poti folosi direct:
 
 ```text
 http://telecom-mcp:8001/mcp
