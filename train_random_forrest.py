@@ -47,3 +47,6 @@ y_pred = model_pipeline.predict(X_test)
 print(f"\n Acuratețe generală: {accuracy_score(y_test, y_pred):.2f}\n")
 print(" Raport de clasificare:")
 print(classification_report(y_test, y_pred, target_names=['Fără întârziere (0)', 'Cu întârziere (1)']))
+
+save_path = os.path.join(os.path.dirname(__file__), 'telecom_rf_model.pkl')
+joblib.dump(model_pipeline, save_path)
