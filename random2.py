@@ -85,6 +85,68 @@ y_test_proba = model_pipeline.predict_proba(X_test)[:, 1]
 evaluate(y_val,  y_val_proba,  THRESHOLD, "VALIDATION")
 evaluate(y_test, y_test_proba, THRESHOLD, "TEST")
 
+# ── Feature Importances ───────────────────────────────────────────────────────
+print(f"\n{'=' * 55}")
+print("IMPORTANȚA VARIABILELOR (Feature Importances)")
+print(f"{'=' * 55}")
+
+# Extragem numele features-urilor după preprocessing
+feature_names = []
+# Numeric features rămân cu numele original
+feature_names.extend(NUMERIC_FEATURES)
+# Categorical features devin one-hot encoded
+ohe = model_pipeline.named_steps['preprocessor'].transformers_[1][1]
+cat_feature_names = ohe.get_feature_names_out(CATEGORICAL_FEATURES).tolist()
+feature_names.extend(cat_feature_names)
+
+# Extragem importanțele din clasificator
+importances = model_pipeline.named_steps['classifier'].feature_importances_
+
+# Creăm DataFrame sortat descrescător
+importance_df = pd.DataFrame({
+    'Feature': feature_names,
+    'Importance': importances
+}).sort_values('Importance', ascending=False)
+
+# Afișăm top 20 cele mai importante variabile
+print("\nTop 20 variabile care influențează payment_delay:\n")
+print(importance_df.head(20).to_string(index=False))
+
+# Afișăm și importanța agregată pe categorii (pentru variabilele categorice)
+print(f"\n{'─' * 55}")
+print("IMPORTANȚA AGREGATĂ PE GRUPE DE VARIABILE:")
+print(f"{'─' * 55}")
+
+# Grupăm importanțele pe categorii logice
+groups = {
+    'Day usage (minutes+calls+charge)': ['total_day_minutes', 'total_day_calls', 'total_day_charge'],
+    'Evening usage': ['total_eve_minutes', 'total_eve_calls', 'total_eve_charge'],
+    'Night usage': ['total_night_minutes', 'total_night_calls', 'total_night_charge'],
+    'International usage': ['total_intl_minutes', 'total_intl_calls', 'total_intl_charge'],
+    'Customer service calls': ['number_customer_service_calls'],
+    'Account length': ['account_length'],
+    'Voicemail': ['number_vmail_messages'],
+    'State (toate one-hot)': [f for f in feature_names if f.startswith('state_')],
+    'Area code (one-hot)': [f for f in feature_names if f.startswith('area_code_')],
+    'International plan': [f for f in feature_names if f.startswith('international_plan_')],
+    'Voice mail plan': [f for f in feature_names if f.startswith('voice_mail_plan_')],
+}
+
+group_importance = {}
+for group_name, features in groups.items():
+    mask = importance_df['Feature'].isin(features)
+    group_importance[group_name] = importance_df.loc[mask, 'Importance'].sum()
+
+group_df = pd.DataFrame({
+    'Grup variabile': list(group_importance.keys()),
+    'Importanță totală': list(group_importance.values())
+}).sort_values('Importanță totală', ascending=False)
+
+print()
+print(group_df.to_string(index=False))
+print(f"\nInterpretare: Cu cât importanța e mai mare, cu atât variabila")
+print(f"contribuie mai mult la decizia modelului privind payment_delay.")
+
 # ── Salvare ───────────────────────────────────────────────────────────────────
 save_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'telecom_rf_model.pkl')
 joblib.dump({'pipeline': model_pipeline, 'threshold': THRESHOLD}, save_path)
