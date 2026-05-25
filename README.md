@@ -1,68 +1,117 @@
 # FlowState-
-# Plan de Implementare Hackathon: AI Solutions (Partea 1 - 4)
 
-Acest document detaliază pașii necesari pentru a construi arhitectura cerută: Antrenare Model ML -> Expunere via FastAPI -> Transformare în server FastMCP -> Containerizare cu OpenWebUI.
+Backend scaffold for the telecom payment delay classification project.
 
-## Cerința 1: Modelarea Datelor (Machine Learning - Clasificare)
+## Project Plan
 
-Scopul este predicția variabilei `payment_delay` (yes/no).
+Flow:
 
-- [ ] **Task 1.1: Explorarea și Preprocesarea Datelor**
-  - Încărcarea setului de date (Pandas).
-  - Gestionarea valorilor lipsă (dacă există).
-  - *Encoding*: Transformarea variabilelor categorice (`state`, `international_plan`, `voice_mail_plan`) în format numeric.
-  - *Scaling*: Standardizarea variabilelor numerice (minute, costuri).
-  - Transformarea variabilei țintă (`payment_delay`) în binar (1/0).
-- [ ] **Task 1.2: Antrenarea Modelului**
-  - Împărțirea datelor în set de antrenare și testare.
-  - Inițializarea și antrenarea modelului de clasificare (Recomandare: **Random Forest**).
-- [ ] **Task 1.3: Evaluarea și Salvarea**
-  - Evaluarea performanței (Acuratețe, F1-Score).
-  - Salvarea modelului și a preprocesorului într-un fișier `.pkl`.
+```text
+ML model -> FastAPI -> FastMCP -> OpenWebUI / MCP client
+```
 
-## Cerința 2: Expunerea Modelului pentru Inferență (FastAPI)
+Main task: predict `payment_delay` for telecom customers.
 
-Scopul este crearea unui microserviciu care să ruleze modelul.
+## Run FastAPI
 
-- [ ] **Task 2.1: Inițializarea FastAPI și Pydantic**
-  - Crearea fișierului `api.py`.
-  - Definirea unei clase `Pydantic` care să reprezinte structura exactă a unui client telecom.
-- [ ] **Task 2.2: Încărcarea Modelului**
-  - Scrierea logicii de încărcare a fișierului `.pkl`.
-- [ ] **Task 2.3: Crearea Endpoint-ului POST `/predict`**
-  - Preluarea JSON-ului, rularea predicției prin model și returnarea unui răspuns curat.
+```bash
+source .venv/bin/activate
+uvicorn app.api:app --reload
+```
 
-## Cerința 3: Extinderea API-ului către FastMCP
+Open:
 
-Scopul este ca modelul să poată fi "chemat" nativ de către un LLM folosind protocolul MCP.
+```text
+http://127.0.0.1:8000/docs
+```
 
-- [ ] **Task 3.1: Configurare FastMCP**
-  - Instalarea librăriei MCP oficiale.
-  - Inițializarea serverului MCP (`mcp = FastMCP("TelecomRiskServer")`).
-- [ ] **Task 3.2: Crearea Tool-ului de Predicție**
-  - Mutarea logicii de predicție sub un decorator MCP (`@mcp.tool()`).
-  - Adăugarea de *Type Hints* și Docstrings detaliate.
-- [ ] **Task 3.3: Adăugarea de Resurse (Opțional/Nice to Have)**
-  - Expunerea unui `@mcp.resource()` care să citească "Statistici ale dataset-ului".
+## Model Artifact
 
-## Cerința 4: Integrarea cu un Client MCP & OpenWebUI (Docker Compose)
+The API looks for the trained model in this order:
 
-Scopul este demonstrarea arhitecturii complete într-un mediu containerizat și interacțiunea reală LLM -> Tool.
+```text
+models/payment_delay_pipeline.joblib
+models/telecom_rf_model.pkl
+telecom_rf_model.pkl
+```
 
-- [ ] **Task 4.1: Containerizarea Serverului ML/MCP**
-  - Crearea unui `Dockerfile` optimizat pentru serverul de Machine Learning.
-  - Crearea fișierului `requirements.txt`.
-- [ ] **Task 4.2: Arhitectura Docker Compose (NICE TO HAVE)**
-  - Crearea fișierului `docker-compose.yml`.
-  - Configurarea serviciului `mcp-server` (backend-ul nostru).
-  - Configurarea serviciului `open-webui` (clientul LLM), setând variabilele de mediu (ex: `ENABLE_MCP`) pentru a se conecta direct la `mcp-server`.
-- [ ] **Task 4.3: Testarea Interacțiunii Inteligente**
-  - Rularea mediului complet (`docker compose up`).
-  - Accesarea interfeței web OpenWebUI.
-  - Trimiterea unui prompt natural (ex: *"Avem un client din zona X cu 300 minute vorbite ziua... Te rog analizează-i riscul de întârziere folosind unealta ta."*).
-  - Validarea faptului că LLM-ul apelează automat tool-ul de predicție și oferă soluția.
+The current model file is:
 
----
+```text
+telecom_rf_model.pkl
+```
 
-> [!IMPORTANT]
-> **Aprobare Necesară:** Planul este acum complet (inclusiv arhitectura de containere). Dacă structura este pe placul tău, dă-mi OK-ul pentru a începe generarea codului!
+It is a scikit-learn pipeline with preprocessing plus `RandomForestClassifier`.
+If no model exists, `/predict` returns a random mock response.
+
+## Run MCP Server
+
+```bash
+source .venv/bin/activate
+python -m app.mcp_server
+```
+
+For an HTTP-style MCP server:
+
+```bash
+python -m app.mcp_server --transport streamable-http
+```
+
+The MCP server exposes:
+
+- Tool: `predict_payment_delay_tool`
+- Resource: `telecom://model-status`
+- Resource: `telecom://dataset-summary`
+- Prompt: `payment_delay_analysis_prompt`
+
+## Test MCP Locally
+
+```bash
+source .venv/bin/activate
+python scripts/test_mcp_tool.py
+```
+
+## Run Part 4 Stack
+
+Put Bedrock credentials in `.env`, then run:
+
+```bash
+docker compose up --build
+```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+Services:
+
+- OpenWebUI: `http://localhost:3000`
+- LiteLLM Bedrock proxy: `http://localhost:4000/v1`
+- FastAPI: `http://localhost:8000/docs`
+- MCP Streamable HTTP: `http://localhost:8001/mcp`
+
+In OpenWebUI, use model `bedrock-chat`. Add the MCP server as an external MCP
+tool with this URL:
+
+```text
+http://telecom-mcp:8001/mcp
+```
+
+Bedrock credentials and model settings go here:
+
+```text
+.env
+```
+
+For LiteLLM, `BEDROCK_LITELLM_MODEL` should include the provider prefix:
+
+```text
+AWS_REGION=us-west-2
+AWS_BEARER_TOKEN_BEDROCK=...
+BEDROCK_MODEL_ID=global.anthropic.claude-sonnet-4-6
+BEDROCK_LITELLM_MODEL=bedrock/converse/global.anthropic.claude-sonnet-4-6
+```
+
+More detailed OpenWebUI notes are in `docs/part4-openwebui.md`.

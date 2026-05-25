@@ -25,21 +25,28 @@ Cheile si modelul Bedrock se pun in:
 .env
 ```
 
-Campurile importante:
+Campurile importante pentru regiunea voastra:
+
+```text
+AWS_REGION=us-west-2
+AWS_BEARER_TOKEN_BEDROCK=...
+BEDROCK_MODEL_ID=global.anthropic.claude-sonnet-4-6
+BEDROCK_LITELLM_MODEL=bedrock/converse/global.anthropic.claude-sonnet-4-6
+```
+
+Daca folosesti Opus in loc de Sonnet:
+
+```text
+BEDROCK_MODEL_ID=global.anthropic.claude-opus-4-6-v1
+BEDROCK_LITELLM_MODEL=bedrock/converse/global.anthropic.claude-opus-4-6-v1
+```
+
+Daca nu ai `AWS_BEARER_TOKEN_BEDROCK`, poti folosi credentiale IAM clasice:
 
 ```text
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
-AWS_REGION=...
-BEDROCK_MODEL_ID=...
-BEDROCK_LITELLM_MODEL=bedrock/...
-```
-
-Exemplu:
-
-```text
-BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
-BEDROCK_LITELLM_MODEL=bedrock/anthropic.claude-3-haiku-20240307-v1:0
+AWS_SESSION_TOKEN=...
 ```
 
 ## Cum pornesti tot stack-ul
@@ -60,6 +67,22 @@ In OpenWebUI ar trebui sa ai modelul:
 
 ```text
 bedrock-chat
+```
+
+Testeaza LiteLLM direct:
+
+```bash
+curl http://localhost:4000/v1/models \
+  -H "Authorization: Bearer local-litellm-key-change-me"
+```
+
+Testeaza chat-ul Bedrock direct prin LiteLLM:
+
+```bash
+curl http://localhost:4000/v1/chat/completions \
+  -H "Authorization: Bearer local-litellm-key-change-me" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"bedrock-chat","messages":[{"role":"user","content":"Raspunde doar cu OK."}]}'
 ```
 
 Serverul MCP este disponibil in Docker la:

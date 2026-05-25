@@ -2,8 +2,6 @@ model_list:
   - model_name: bedrock-chat
     litellm_params:
       model: os.environ/BEDROCK_LITELLM_MODEL
-      aws_access_key_id: os.environ/AWS_ACCESS_KEY_ID
-      aws_secret_access_key: os.environ/AWS_SECRET_ACCESS_KEY
       aws_region_name: os.environ/AWS_REGION
 
 general_settings:
