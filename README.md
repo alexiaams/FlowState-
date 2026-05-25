@@ -91,9 +91,19 @@ Services:
 - LiteLLM Bedrock proxy: `http://localhost:4000/v1`
 - FastAPI: `http://localhost:8000/docs`
 - MCP Streamable HTTP: `http://localhost:8001/mcp`
+- MCPO OpenAPI bridge: `http://localhost:8002/docs`
 
-In OpenWebUI, use model `bedrock-chat`. Add the MCP server as an external MCP
-tool with this URL:
+In OpenWebUI, use model `bedrock-chat`.
+
+If the UI asks for OpenAPI-compatible Tool Servers, add:
+
+```text
+http://mcpo:8002
+```
+
+No header/API key is needed for the local demo.
+
+If the UI explicitly asks for MCP Streamable HTTP, add:
 
 ```text
 http://telecom-mcp:8001/mcp
